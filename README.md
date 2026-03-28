@@ -1,154 +1,154 @@
 # ATAgent
-智能体框架
-> 让任意应用都能被 AI 控制的智能体框架
+**Intelligent Agent Framework**
+> An agent framework that lets AI control any application
 
-**⚠️ 当前状态：概念阶段，正在设计中，尚未有可用代码。欢迎参与讨论和贡献想法。**
-
----
-
-## 这是什么
-
-ATAgent 是一个面向开发者的**轻量智能体框架**（构思中）。
-
-核心思路：开发者只需将应用中可执行的操作注册到框架里，用户便可以通过**文字或语音**来控制应用，由 AI 负责理解意图、匹配操作、驱动执行。
-
-```
-用户说："帮我添加一个明天开会的提醒"
-
-ATAgent 的处理过程：
-  1. 理解意图 → 添加待办
-  2. 匹配到已注册的 add_todo 操作
-  3. 提取参数 → content = "明天开会的提醒"
-  4. 驱动执行 → 完成
-```
+**⚠️ Current Status: Conceptual stage, under design — no working code yet. Discussion and ideas are welcome.**
 
 ---
 
-## 为什么做这个
+## What Is This
 
-AI 编程已成为不可逆趋势，未来会有更多的人参与或进入这个领域，给自己的项目赋予AI能力是一个很不错的方向，但目前市面上的方案都有明显局限：
+ATAgent is a **lightweight agent framework** (in progress) aimed at developers.
 
-- **LangChain / AutoGen**：太重，面向 AI 开发者，普通开发者接入成本高
-- **RPA 工具（UiPath / Zapier）**：企业级定价，配置复杂，非开发者友好
-- **AutoHotkey / PyAutoGUI**：纯脚本驱动，没有自然语言理解能力
-- **Apple Intelligence / Copilot**：封闭生态，无法嵌入第三方应用
+The core idea: developers register the available actions of their application into the framework, and users can then control the app through **text or voice**. The AI handles intent recognition, action matching, and execution.
 
-ATAgent 想填补的空白：**轻量、可嵌入任意应用、开发者自己定义 AI 能做什么。**
+```
+User says: "Add a reminder for tomorrow's meeting"
+
+ATAgent's process:
+  1. Understand intent → Add a to-do
+  2. Match registered action → add_todo
+  3. Extract parameters → content = "tomorrow's meeting reminder"
+  4. Execute → Done
+```
 
 ---
 
-## 设计思路
+## Why Build This
 
-### 核心流程
+AI-powered development is an irreversible trend. More people will enter this space, and giving your own projects AI capabilities is a compelling direction — but existing solutions all have clear limitations:
+
+- **LangChain / AutoGen** — Too heavy; built for AI developers, with a high barrier to entry for general developers
+- **RPA tools (UiPath / Zapier)** — Enterprise pricing, complex configuration, not developer-friendly
+- **AutoHotkey / PyAutoGUI** — Script-driven only; no natural language understanding
+- **Apple Intelligence / Copilot** — Closed ecosystems; cannot be embedded into third-party apps
+
+The gap ATAgent aims to fill: **lightweight, embeddable in any application, with developers defining exactly what AI can do.**
+
+---
+
+## Design
+
+### Core Pipeline
 
 ```
-文字 / 语音
+Text / Voice
      │
      ▼
 ┌─────────────────┐
-│   指令理解       │  AI-1：规则优先 + LLM/NLU
-│                 │  高频精确指令走规则，模糊意图走 LLM
+│ Intent Parser   │  AI-1: Rule-first + LLM/NLU
+│                 │  High-frequency commands → rules; ambiguous intent → LLM
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  Action Router  │  AI-2：编排层
-│                 │  在已注册的 Action 中匹配、排序、组合
+│ Action Router   │  AI-2: Orchestration layer
+│                 │  Match, rank, and compose from registered Actions
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│    Executor     │  AI-3：执行层
-│                 │  生成执行脚本，驱动 UI / 接口完成操作
+│   Executor      │  AI-3: Execution layer
+│                 │  Generate execution scripts; drive UI / APIs
 └─────────────────┘
          │
          ▼
-     结果反馈
+     Result & Feedback
 ```
 
-**进阶版（语音持续对话）：**
+**Advanced mode (continuous voice conversation):**
 
 ```
-语音 → ASR（FunASR）转文字 → 指令理解 → Action Router → Executor → 反馈
+Voice → ASR (FunASR) → Text → Intent Parser → Action Router → Executor → Feedback
 ```
 
 ---
 
-### Action 描述规范（设计草案）
+### Action Schema (Draft)
 
-这是整个框架的核心。**开发者通过配置 Action 来告诉 AI 这个应用能做什么。**
+This is the heart of the framework. **Developers configure Actions to tell the AI what the application can do.**
 
 ```json
 {
   "name": "add_todo",
-  "description": "添加一条新的待办事项",
+  "description": "Add a new to-do item",
   "params": {
-    "content": "任务的文字内容",
-    "due_date": "截止日期（可选）"
+    "content": "The text content of the task",
+    "due_date": "Due date (optional)"
   },
   "trigger": {
     "type": "ui",
-    "steps": "点击右下角+按钮，输入内容，点确认"
+    "steps": "Click the + button in the bottom-right, enter content, click confirm"
   },
   "permission": "normal"
 }
 ```
 
-| 字段 | 说明 |
-|------|------|
-| `name` | 操作唯一标识 |
-| `description` | 给 AI 看的自然语言描述，越清晰匹配越准 |
-| `params` | 执行此操作所需的参数 |
-| `trigger` | 执行方式：UI 点击 / 接口调用 / 脚本 |
-| `permission` | 权限等级：`normal` / `confirm` / `admin` |
+| Field | Description |
+|-------|-------------|
+| `name` | Unique identifier for the action |
+| `description` | Natural language description for the AI — the clearer it is, the more accurate the matching |
+| `params` | Parameters required to execute the action |
+| `trigger` | Execution method: UI click / API call / script |
+| `permission` | Permission level: `normal` / `confirm` / `admin` |
 
-> `description` 是 Action Router 匹配的核心依据，这个字段的设计规范还在讨论中。
-
----
-
-### 权限分级（设计草案）
-
-涉及不可逆操作时，框架计划提供三级权限控制：
-
-| 等级 | 行为 | 适用场景 |
-|------|------|------|
-| `normal` | 直接执行 | 查询、浏览、添加 |
-| `confirm` | 执行前需用户二次确认 | 删除、发送、支付 |
-| `admin` | 需要管理员身份 | 系统配置、权限变更 |
+> `description` is the primary signal the Action Router uses for matching. The design spec for this field is still under discussion.
 
 ---
 
-### 可视化面板（设计草案）
+### Permission Levels (Draft)
 
-计划为框架配套一个 Action 管理面板：
+For irreversible operations, the framework plans to offer three-tier permission control:
 
-- 通过界面注册和编辑 Action，无需手写配置
-- 执行前预览 AI 的执行计划（调试模式）
-- Action 配置支持导入/导出，在项目间复用
-
----
-
-## 版本规划
-
-| 版本 | 目标 | 状态 |
-|------|------|------|
-| **1.0.0** | Web 端：Action 注册面板 + 文字指令 + 单步执行 + 反馈展示 | 🚧 设计中 |
-| **1.5.0** | Web 端进阶：多步骤任务链 + 错误恢复 + 执行历史 | 📋 规划中 |
-| **2.0.0** | 桌面程序：跨应用操作 + 本地 LLM 支持 | 📋 规划中 |
-| **2.5.0** | 语音接入：FunASR 集成 + 持续对话模式 | 📋 规划中 |
-| **3.0.0** | 移动端：手势/点击执行 + 移动端适配 | 📋 规划中 |
+| Level | Behavior | Use Cases |
+|-------|-----------|-----------|
+| `normal` | Execute directly | Queries, browsing, adding |
+| `confirm` | Requires user confirmation before executing | Deleting, sending, paying |
+| `admin` | Requires administrator identity | System config, permission changes |
 
 ---
 
-## 参与讨论
+### Visual Management Panel (Draft)
 
-这个项目还处于早期构思阶段，非常欢迎：
+A companion Action management panel is planned:
 
-- 在 [Issues](../../issues) 中提出你的想法或质疑
-- 对 Action 描述规范的设计提出建议
-- 分享你觉得这个框架应该支持的场景
+- Register and edit Actions through a UI — no manual config files needed
+- Preview the AI's execution plan before running (debug mode)
+- Import/export Action configs for reuse across projects
 
-**如果你认为这个方向有价值，给个 ⭐ 是最好的支持。**
+---
+
+## Roadmap
+
+| Version | Goal | Status |
+|---------|------|--------|
+| **1.0.0** | Web: Action registration panel + text commands + single-step execution + feedback display | 🚧 Designing |
+| **1.5.0** | Web advanced: Multi-step task chains + error recovery + execution history | 📋 Planned |
+| **2.0.0** | Desktop: Cross-app control + local LLM support | 📋 Planned |
+| **2.5.0** | Voice: FunASR integration + continuous conversation mode | 📋 Planned |
+| **3.0.0** | Mobile: Gesture/tap execution + mobile-optimized UI | 📋 Planned |
+
+---
+
+## Get Involved
+
+This project is still in its early conceptual stage. Contributions of all kinds are welcome:
+
+- Open an [Issue](../../issues) to share ideas or raise concerns
+- Suggest improvements to the Action schema design
+- Describe use cases you think the framework should support
+
+**If you think this direction has value, a ⭐ is the best way to show it.**
 
 ---
 
