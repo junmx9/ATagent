@@ -1,16 +1,14 @@
 # ATAgent
 
-Lightweight Agent Framework
+Lightweight Agent engine
 
-> A lightweight framework that lets AI control any application
-
-**⚠️ Current Status: Design Phase.**
+> A lightweight engine that lets AI control any application
 
 ---
 
 ## 1. What is this?
 
-ATAgent is a **lightweight Agent framework** that helps developers quickly add natural language control capabilities to their applications.
+ATAgent is a **lightweight Agent engine** that helps developers quickly add natural language control capabilities to their applications.
 
 **Core idea**: Developers define what their application can do using a single JSON file (actions, parameters, permissions, execution conditions). ATAgent calls an AI model to understand the user's natural language input, matches the right action within the defined structure, extracts the required parameters, and invokes the corresponding business function. Developers define "what can be done" — AI understands "what the user wants to do."
 
@@ -34,10 +32,10 @@ User says something ambiguous:
 - **AI semantic understanding**: Users can express themselves naturally in any way; action definitions, parameter structures, permissions, and execution conditions are explicitly defined by the developer in JSON — AI operates within this structure.
 - **Pure configuration-driven**: All actions are defined in a JSON file. No AI-related code required.
 - **Plug and play**: Copy the ATAgent folder into your project. No package manager required.
-- **Framework agnostic**: Embeds into web, desktop, backend, or any other environment.
+- **engine agnostic**: Embeds into web, desktop, backend, or any other environment.
 - **Fully custom UI**: The AI interaction interface (buttons, dialogs, etc.) is designed entirely by the developer. ATAgent only provides the API.
 - **Visual configuration**: Built-in configuration UI for managing actions and AI settings — ready to use out of the box during development.
-- **Voice input support**: Developers can integrate any speech recognition solution and pass the resulting text into the framework, enabling a complete voice-controlled experience.
+- **Voice input support**: Developers can integrate any speech recognition solution and pass the resulting text into the engine, enabling a complete voice-controlled experience.
 
 ---
 
@@ -131,7 +129,7 @@ ai: {
 
 ## 5. Action Definition Format (JSON)
 
-Developers define the full action structure in `config/actions.json`. This is the core of the framework — AI understanding and execution both operate within this structure:
+Developers define the full action structure in `config/actions.json`. This is the core of the engine — AI understanding and execution both operate within this structure:
 
 ```json
 {
@@ -199,14 +197,80 @@ Developers define the full action structure in `config/actions.json`. This is th
 | `description` | string | ✅ | Describes what the action does — AI uses this to understand its purpose |
 | `parameters` | array | ❌ | Parameter structure definition — AI extracts values from user input |
 | `examples` | array | ✅ | Example phrases — helps AI recognize trigger scenarios. More is better. |
-| `messages` | object | ❌ | Message templates that override the framework's default prompts |
+| `messages` | object | ❌ | Message templates that override the engine's default prompts |
 | `permission` | string | ❌ | Permission level: `normal` / `confirm` / `admin` |
 | `enabled` | boolean | ❌ | Whether the action is active. Default: `true` |
 | `tags` | array | ❌ | Category tags used to pre-filter the candidate set by context, reducing the number of actions sent to AI per call |
+| `cache` | object | ❌ | Explicit success-result cache settings. Disabled by default. |
+| `workflow` | object | ❌ | Sequential workflow definition. Each step can reference root params, context, and previous step results. |
 
-> **On the `version` field**: Identifies the config file format version. Used by the framework during hot-reload to handle in-progress sessions and prevent state corruption.
+> **On the `version` field**: Identifies the config file format version. Used by the engine during hot-reload to handle in-progress sessions and prevent state corruption.
 
----
+### 5.1 Advanced action fields
+
+**Tag pre-filtering**
+
+Pass `context.tags` when executing. ATAgent first narrows the candidate set by overlapping action tags, and automatically falls back to the full action list if nothing matches.
+
+```javascript
+await agent.execute("Open settings", {
+  context: {
+    tags: ["navigation"]
+  }
+});
+```
+
+**Explicit cache**
+
+Caching is opt-in and only stores `success` responses.
+
+```json
+{
+  "name": "fetch_summary",
+  "cache": {
+    "ttlMs": 60000,
+    "contextKeys": ["userId"]
+  }
+}
+```
+
+- `ttlMs`: cache lifetime in milliseconds
+- `contextKeys`: optional context fields included in the cache key
+
+**Sequential workflow**
+
+Workflow actions execute `steps` in order. Step params support `{{...}}` references to:
+
+- `params.<name>` for root action params
+- `context.<name>` for request context
+- `steps.<stepId>.data.<field>` for previous step results
+
+```json
+{
+  "name": "prepare_report",
+  "workflow": {
+    "steps": [
+      {
+        "id": "draft",
+        "action": "create_draft",
+        "params": {
+          "title": "{{params.title}}"
+        }
+      },
+      {
+        "id": "publish",
+        "action": "publish_draft",
+        "params": {
+          "draftId": "{{steps.draft.data.id}}",
+          "note": "publish {{params.title}}"
+        }
+      }
+    ]
+  }
+}
+```
+
+--- 
 
 ## 6. AI Semantic Understanding
 
@@ -244,11 +308,11 @@ At any point, users can bypass AI matching by typing a command directly in `/act
 /delete_todo id=123
 ```
 
-After two consecutive clarification rounds fail to resolve the intent, the framework automatically prompts the user with this option.
+After two consecutive clarification rounds fail to resolve the intent, the engine automatically prompts the user with this option.
 
 ### 6.3 Clarification round limit
 
-A maximum of 2 clarification rounds are attempted. After that, the framework responds with:
+A maximum of 2 clarification rounds are attempted. After that, the engine responds with:
 
 ```text
 "I'm still unable to understand your request. You can use /action_name to execute directly, e.g. /add_todo team meeting tomorrow"
@@ -369,7 +433,45 @@ switch (result.status) {
 
 ### 7.4 Multi-turn conversations
 
-Session state is identified by `sessionId`. The framework uses in-memory storage by default; developers can replace this with Redis or any other persistence layer.
+Session state is identified by `sessionId`. The engine uses in-memory storage by default.
+
+For a zero-dependency persistence option, you can use the built-in JSON file stores:
+
+```javascript
+const ATAgent = require('./atagent');
+
+const agent = new ATAgent({
+  sessionStore: new ATAgent.JsonFileStateStore('./data/sessions.json'),
+  confirmationStore: new ATAgent.JsonFileStateStore('./data/confirmations.json'),
+  cacheStore: new ATAgent.JsonFileCacheStore('./data/cache.json')
+});
+```
+
+If you already use Redis, MySQL, PostgreSQL, or your own application database, inject a custom store instead. The engine does not depend on any specific storage backend; it only expects a minimal interface:
+
+```javascript
+const stateStore = {
+  async get(key) {},
+  async set(key, value) {},
+  async delete(key) {}
+};
+
+const cacheStore = {
+  async get(key) {},
+  async set(key, value, ttlMs) {},
+  async delete(key) {}
+};
+
+const agent = new ATAgent({
+  sessionStore: stateStore,
+  confirmationStore: stateStore,
+  cacheStore
+});
+```
+
+- `sessionStore` / `confirmationStore`: persistence for clarification sessions and confirmation tokens
+- `cacheStore`: persistence for successful action result caching
+- The default remains in-memory. JSON, Redis, or database storage is only enabled when you pass a custom store explicitly.
 
 ```text
 User:  "Add a to-do"
@@ -397,7 +499,7 @@ if (result.status === 'needs_more_info') {
 
 ## 8. Prompts and Messages
 
-The framework ships with sensible default prompts. Developers can override them globally or per action:
+The engine ships with sensible default prompts. Developers can override them globally or per action:
 
 **Global override (at initialization)**:
 ```javascript
@@ -472,7 +574,7 @@ ATAgent includes a built-in web configuration UI (the `ui/` directory). Access i
 
 The top-level `version` field in `actions.json` manages configuration changes:
 
-- **Hot reload**: The framework reloads config automatically without a restart.
+- **Hot reload**: The engine reloads config automatically without a restart.
 - **Session protection**: During hot reload, in-progress multi-turn conversation sessions are handled with compatibility checks.
 - **Breaking changes** (e.g. removing an action, changing a required parameter) are automatically treated as a new version. Active sessions receive a friendly message and are gracefully closed.
 
@@ -515,9 +617,9 @@ The top-level `version` field in `actions.json` manages configuration changes:
 ATAgent gives any application natural language control capabilities with **a single folder and a single JSON config file**. Core design principles:
 
 - **Developers define the structure, AI understands the intent**: Actions, parameters, permissions, and execution conditions are explicitly defined by the developer. AI operates within this structure to interpret user intent and extract parameters — clear separation of responsibilities.
-- **Clarify rather than fail silently**: When intent is uncertain, the framework asks — users always know what's happening.
+- **Clarify rather than fail silently**: When intent is uncertain, the engine asks — users always know what's happening.
 - **Users can always take control**: The `/action_name params` format is available as a fallback in every scenario.
-- **The framework provides the API — UI and prompts belong to the developer**: Sensible defaults ship out of the box, fully overridable when needed.
+- **The engine provides the API — UI and prompts belong to the developer**: Sensible defaults ship out of the box, fully overridable when needed.
 - **Security first**: Permission levels + `canExecute` pre-execution checks protect sensitive operations in production.
 
 ---

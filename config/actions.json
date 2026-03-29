@@ -1,0 +1,59 @@
+{
+  "version": "1.0.0",
+  "actions": [
+    {
+      "name": "add_todo",
+      "description": "添加一条待办事项",
+      "parameters": [
+        {
+          "name": "content",
+          "type": "string",
+          "description": "待办内容",
+          "required": true
+        },
+        {
+          "name": "due_date",
+          "type": "string",
+          "description": "截止日期（可选）",
+          "required": false
+        }
+      ],
+      "examples": [
+        "添加待办 明天开会",
+        "新增任务 写周报",
+        "创建一个待办：买牛奶"
+      ],
+      "messages": {
+        "success": "待办「{content}」已添加",
+        "confirm": "确认要添加待办「{content}」吗？"
+      },
+      "permission": "normal",
+      "enabled": true,
+      "tags": [
+        "生产力"
+      ]
+    },
+    {
+      "name": "navigate",
+      "description": "跳转到应用内的指定页面",
+      "parameters": [
+        {
+          "name": "page",
+          "type": "string",
+          "description": "目标页面名称",
+          "required": true
+        }
+      ],
+      "examples": [
+        "跳转到设置页面",
+        "打开个人资料",
+        "前往首页"
+      ],
+      "permission": "normal",
+      "enabled": true,
+      "tags": [
+        "导航"
+      ]
+    }
+  ]
+}
