@@ -1,5 +1,7 @@
 # ATAgent
 
+![ATAgent overview](./photo/sy.png)
+
 Lightweight Agent engine
 
 > A lightweight engine that lets AI control any application
@@ -25,12 +27,11 @@ User says something ambiguous:
 
   1. AI identifies multiple candidates → list them for the user to choose
   2. AI determines intent is unclear → proactively asks for clarification
-  3. User types /add_todo tomorrow meeting → skip AI, execute directly
 ```
 
 **Key features**:
 - **AI semantic understanding**: Users can express themselves naturally in any way; action definitions, parameter structures, permissions, and execution conditions are explicitly defined by the developer in JSON — AI operates within this structure.
-- **Pure configuration-driven**: All actions are defined in a JSON file. No AI-related code required.
+- **Pure configuration-driven**: All actions are defined in a JSON file.
 - **Plug and play**: Copy the ATAgent folder into your project. No package manager required.
 - **engine agnostic**: Embeds into web, desktop, backend, or any other environment.
 - **Fully custom UI**: The AI interaction interface (buttons, dialogs, etc.) is designed entirely by the developer. ATAgent only provides the API.
@@ -44,7 +45,7 @@ User says something ambiguous:
 | | Scenario | Notes |
 |---|---|---|
 | ✅ | Private deployment / internal tools | Compatible with self-hosted models (e.g. Ollama) |
-| ✅ | Applications with a well-defined action set | Recommended: ≤ 500 actions |
+| ✅ | Applications with a well-defined action set | Recommended: ≤ 5000 actions |
 | ✅ | Complex natural language understanding | Semantic understanding is handled by AI, covering any phrasing |
 | ✅ | Multi-language input | AI natively supports multiple languages, no extra adaptation needed |
 | ✅ | Workflow orchestration | Supports dependencies and sequential execution across actions |
@@ -53,6 +54,8 @@ User says something ambiguous:
 ---
 
 ## 3. Architecture
+
+![ATAgent architecture](./photo/jgt.png)
 
 ATAgent is embedded into the developer's project as a **folder**:
 
@@ -195,14 +198,14 @@ Developers define the full action structure in `config/actions.json`. This is th
 |-------|------|----------|-------------|
 | `name` | string | ✅ | Unique action identifier, used for handler mapping in code |
 | `description` | string | ✅ | Describes what the action does — AI uses this to understand its purpose |
-| `parameters` | array | ❌ | Parameter structure definition — AI extracts values from user input |
+| `parameters` | array | ⭕ | Parameter structure definition — AI extracts values from user input |
 | `examples` | array | ✅ | Example phrases — helps AI recognize trigger scenarios. More is better. |
-| `messages` | object | ❌ | Message templates that override the engine's default prompts |
-| `permission` | string | ❌ | Permission level: `normal` / `confirm` / `admin` |
-| `enabled` | boolean | ❌ | Whether the action is active. Default: `true` |
-| `tags` | array | ❌ | Category tags used to pre-filter the candidate set by context, reducing the number of actions sent to AI per call |
-| `cache` | object | ❌ | Explicit success-result cache settings. Disabled by default. |
-| `workflow` | object | ❌ | Sequential workflow definition. Each step can reference root params, context, and previous step results. |
+| `messages` | object | ⭕ | Message templates that override the engine's default prompts |
+| `permission` | string | ⭕ | Permission level: `normal` / `confirm` / `admin` |
+| `enabled` | boolean | ⭕ | Whether the action is active. Default: `true` |
+| `tags` | array | ⭕ | Category tags used to pre-filter the candidate set by context, reducing the number of actions sent to AI per call |
+| `cache` | object | ⭕ | Explicit success-result cache settings. Disabled by default. |
+| `workflow` | object | ⭕ | Sequential workflow definition. Each step can reference root params, context, and previous step results. |
 
 > **On the `version` field**: Identifies the config file format version. Used by the engine during hot-reload to handle in-progress sessions and prevent state corruption.
 
@@ -587,7 +590,7 @@ The top-level `version` field in `actions.json` manages configuration changes:
 | End-to-end response time | < 2s | Includes AI API call under good network conditions |
 | Local processing time | < 10ms | Local logic only, excluding AI API call |
 | Memory usage | < 20MB | Includes all action configs and runtime state |
-| Max recommended actions | 500 | Above this, use `tags`-based routing to reduce actions sent per AI call |
+| Max recommended actions | 5000 | Above this, use `tags`-based routing to reduce actions sent per AI call |
 
 **Performance tips**:
 - Use `tags` to pre-filter the candidate set by context, reducing the number of actions sent to AI and lowering both latency and token cost.
