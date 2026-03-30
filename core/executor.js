@@ -17,6 +17,7 @@ async function executeAction({
   preConfirmed,
   cacheStore,
   actionResolver,
+  confirmationMeta,
   executionPath = []
 }) {
   const entry = normalizeHandlerEntry(handlers[action.name]);
@@ -54,7 +55,8 @@ async function executeAction({
       params,
       context,
       sessionId,
-      configVersion
+      configVersion,
+      ...(confirmationMeta || {})
     });
     const template =
       action.messages.confirm || messages.confirm || '确认执行“{action}”吗？';

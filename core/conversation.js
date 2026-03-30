@@ -80,6 +80,37 @@ class ConversationStore {
     await this.sessions.delete(sessionId);
   }
 
+  async createPlanSession(planId, payload) {
+    const id = planId || randomId("plan");
+    await this.sessions.set(id, {
+      kind: "plan",
+      id,
+      ...clone(payload),
+      updatedAt: Date.now()
+    });
+    return id;
+  }
+
+  async getPlanSession(planId) {
+    const session = await this.getSession(planId);
+    if (!session || session.kind !== "plan") {
+      return null;
+    }
+    return session;
+  }
+
+  async updatePlanSession(planId, patch) {
+    const session = await this.getSession(planId);
+    if (!session || session.kind !== "plan") {
+      return null;
+    }
+    return this.updateSession(planId, patch);
+  }
+
+  async clearPlanSession(planId) {
+    await this.clearSession(planId);
+  }
+
   async createConfirmation(payload) {
     const token = randomId("confirm");
     await this.confirmations.set(token, {

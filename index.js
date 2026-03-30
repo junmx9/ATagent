@@ -5,6 +5,8 @@ const path = require("node:path");
 const { MemoryCacheStore } = require("./core/cache");
 const { AIEngine, getMissingParams, parseDirectCommand } = require("./core/ai");
 const { ConversationStore, MemoryStateStore } = require("./core/conversation");
+const { PlanEngine } = require("./core/planner");
+const { executePlan, resumePlanAfterAction } = require("./core/plan_runtime");
 const { JsonFileStateStore, JsonFileCacheStore } = require("./core/json_store");
 const { ConfigStore } = require("./core/loader");
 const { executeAction } = require("./core/executor");
@@ -40,6 +42,12 @@ class ATAgent {
     this.maxCandidates = Number.isInteger(options.maxCandidates)
       ? options.maxCandidates
       : 3;
+    this.maxPlanSteps = Number.isInteger(options.maxPlanSteps)
+      ? options.maxPlanSteps
+      : 6;
+    this.maxPlanReplans = Number.isInteger(options.maxPlanReplans)
+      ? options.maxPlanReplans
+      : 2;
     this.messages = { ...DEFAULT_MESSAGES, ...(options.messages || {}) };
     this.uiBasePath = options.uiBasePath || "/atagent";
     this.handlers = {};
@@ -66,6 +74,13 @@ class ATAgent {
     this.aiEngine = new AIEngine({
       getSettings: () => this.getAiSettings()
     });
+    this.planEngine =
+      options.planEngine && typeof options.planEngine === "object"
+        ? options.planEngine
+        : new PlanEngine({
+            getSettings: () => this.getAiSettings(),
+            analyze: (payload) => this.aiEngine.analyze(payload)
+          });
 
     if (options.watchConfig !== false) {
       this.configStore.watch((snapshot) => {
@@ -126,6 +141,10 @@ class ATAgent {
       return this.buildUnresolved();
     }
 
+    if (request.mode === "goal") {
+      return this.executeGoal(request);
+    }
+
     const directCommand = parseDirectCommand(request.input, this.listActions());
     if (directCommand) {
       return this.executeResolvedAction({
@@ -177,7 +196,8 @@ class ATAgent {
       await this.conversations.clearSession(request.sessionId);
       return this.execute(request.input, {
         context: request.context,
-        sessionId: request.sessionId
+        sessionId: request.sessionId,
+        mode: session.mode
       });
     }
 
@@ -232,12 +252,42 @@ class ATAgent {
     }
 
     await this.conversations.clearSession(request.sessionId);
-    return this.executeResolvedAction({
+
+    if (!session.planSessionId) {
+      return this.executeResolvedAction({
+        action,
+        params: nextParams,
+        context: request.context,
+        sessionId: request.sessionId,
+        originalInput: request.input
+      });
+    }
+
+    const stepResult = await this.performActionExecution({
       action,
       params: nextParams,
       context: request.context,
-      sessionId: request.sessionId,
-      originalInput: request.input
+      sessionId: session.planSessionId,
+      preConfirmed: false,
+      confirmationMeta: {
+        planSessionId: session.planSessionId,
+        planStepId: session.planStep?.id
+      }
+    });
+
+    if (stepResult.status === "requires_confirmation") {
+      return {
+        ...stepResult,
+        mode: "goal",
+        planId: session.planSessionId,
+        current_step: session.planStep || null
+      };
+    }
+
+    return this.resumePlanAfterStep({
+      planSessionId: session.planSessionId,
+      stepResult,
+      context: request.context
     });
   }
 
@@ -256,19 +306,24 @@ class ATAgent {
       return this.buildUnresolved(this.messages.missingAction);
     }
 
-    return executeAction({
+    const context = { ...(record.context || {}), ...(options.context || {}) };
+    const result = await this.performActionExecution({
       action,
       params: record.params,
-      context: { ...(record.context || {}), ...(options.context || {}) },
-      handlers: this.handlers,
-      messages: this.messages,
-      conversations: this.conversations,
+      context,
       sessionId: options.sessionId || record.sessionId,
-      configVersion: record.configVersion,
-      preConfirmed: true,
-      cacheStore: this.cacheStore,
-      actionResolver: (name) => this.findAction(name)
+      preConfirmed: true
     });
+
+    if (record.planSessionId) {
+      return this.resumePlanAfterStep({
+        planSessionId: record.planSessionId,
+        stepResult: result,
+        context
+      });
+    }
+
+    return result;
   }
 
   middleware(options = {}) {
@@ -318,7 +373,8 @@ class ATAgent {
     return {
       input: typeof input === "string" ? input.trim() : "",
       context: options.context || {},
-      sessionId: options.sessionId || null
+      sessionId: options.sessionId || null,
+      mode: options.mode === "goal" ? "goal" : "action"
     };
   }
 
@@ -424,6 +480,99 @@ class ATAgent {
       };
     }
 
+    return this.performActionExecution({
+      action,
+      params,
+      context,
+      sessionId,
+      preConfirmed: false
+    });
+  }
+
+  async executeGoal(request) {
+    const actions = this.selectActionsForAnalysis(request.context);
+    const plan = await this.planEngine.createPlan({
+      input: request.input,
+      actions,
+      context: request.context,
+      maxSteps: this.maxPlanSteps
+    });
+
+    if (plan.type === "error") {
+      return {
+        status: "error",
+        mode: "goal",
+        message: plan.error.message,
+        error: plan.error
+      };
+    }
+
+    if (plan.type === "clarify") {
+      const generatedSessionId = request.sessionId || randomId("session");
+      await this.conversations.createClarification(generatedSessionId, {
+        actionName: null,
+        params: {},
+        missingParams: [],
+        clarifyRound: 1,
+        configVersion: this.getActionsConfig().version,
+        originalInput: request.input,
+        mode: "goal",
+        updatedAt: Date.now()
+      });
+      return {
+        status: "needs_more_info",
+        mode: "goal",
+        action: null,
+        missing_params: [],
+        question: plan.question || this.messages.askClarify,
+        clarifyRound: 1,
+        sessionId: generatedSessionId
+      };
+    }
+
+    return executePlan({
+      input: request.input,
+      plan,
+      context: request.context,
+      actions,
+      messages: this.messages,
+      conversations: this.conversations,
+      actionResolver: (name) => this.findAction(name),
+      executeAction: (payload) => this.performActionExecution(payload),
+      buildClarifyQuestion: (action, missingParams) =>
+        this.aiEngine.buildClarifyQuestion(action, missingParams),
+      configVersion: this.getActionsConfig().version,
+      planEngine: this.planEngine,
+      maxPlanSteps: this.maxPlanSteps,
+      maxPlanReplans: this.maxPlanReplans
+    });
+  }
+
+  async resumePlanAfterStep({ planSessionId, stepResult, context }) {
+    return resumePlanAfterAction({
+      planSessionId,
+      stepResult,
+      context,
+      actions: this.selectActionsForAnalysis(context),
+      messages: this.messages,
+      conversations: this.conversations,
+      actionResolver: (name) => this.findAction(name),
+      executeAction: (payload) => this.performActionExecution(payload),
+      buildClarifyQuestion: (action, missingParams) =>
+        this.aiEngine.buildClarifyQuestion(action, missingParams),
+      configVersion: this.getActionsConfig().version,
+      planEngine: this.planEngine
+    });
+  }
+
+  async performActionExecution({
+    action,
+    params,
+    context,
+    sessionId,
+    preConfirmed,
+    confirmationMeta
+  }) {
     return executeAction({
       action,
       params,
@@ -433,9 +582,10 @@ class ATAgent {
       conversations: this.conversations,
       sessionId,
       configVersion: this.getActionsConfig().version,
-      preConfirmed: false,
+      preConfirmed,
       cacheStore: this.cacheStore,
-      actionResolver: (name) => this.findAction(name)
+      actionResolver: (name) => this.findAction(name),
+      confirmationMeta
     });
   }
 

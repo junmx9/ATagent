@@ -498,6 +498,27 @@ if (result.status === 'needs_more_info') {
 }
 ```
 
+### 7.6 动态目标模式
+
+如果一条用户输入需要被拆成多个 action 执行，可以启用目标模式：
+
+```javascript
+const result = await agent.execute("联系张三并通知他", {
+  mode: "goal",
+  context: { userId: "cli-user" }
+});
+```
+
+目标模式下，引擎会：
+
+- 先根据用户目标生成初始多步计划
+- 按步骤逐步执行 action
+- 根据中间结果动态调整后续步骤
+- 在 `needs_more_info` 或 `requires_confirmation` 时暂停
+- 通过 `agent.continue(...)` 或 `agent.confirm(...)` 恢复并继续原计划
+
+动态计划仍然只会使用已注册 action，planner 不能脱离动作集自行发明新动作。
+
 ---
 
 ## 8. 提示语与话术

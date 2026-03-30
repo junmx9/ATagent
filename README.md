@@ -498,6 +498,27 @@ if (result.status === 'needs_more_info') {
 }
 ```
 
+### 7.6 Dynamic goal mode
+
+When a single user input should expand into multiple actions, run the engine in goal mode:
+
+```javascript
+const result = await agent.execute("Contact Zhang San and notify him", {
+  mode: "goal",
+  context: { userId: "cli-user" }
+});
+```
+
+Goal mode lets the engine:
+
+- create an initial multi-step plan from the user's request
+- execute actions step by step
+- change later steps based on intermediate results
+- pause on `needs_more_info` or `requires_confirmation`
+- continue the same plan after `agent.continue(...)` or `agent.confirm(...)`
+
+The dynamic plan still stays inside the registered action set. The planner can only choose known actions.
+
 ---
 
 ## 8. Prompts and Messages

@@ -85,7 +85,8 @@ function createHttpHandler(agent, { basePath = "/atagent", security = {} } = {})
         const body = await readJsonBody(req);
         const result = await agent.execute(body.input, {
           context: body.context || {},
-          sessionId: body.sessionId || null
+          sessionId: body.sessionId || null,
+          mode: body.mode
         });
         sendJson(res, 200, result);
         return;
